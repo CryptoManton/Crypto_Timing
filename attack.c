@@ -38,28 +38,22 @@ int main (void)
                         * abholen */
 
   /* XXX Aufgabe: mit exp_daemon () Samples generieren und y_trial berechnen */
-  mpz_t z, x, y, y0;
+  mpz_t z, x0;
   mpz_init (z);
-  mpz_init (x);
-  mpz_init (y);
-  mpz_init (y0);
+  mpz_init (x0);
   
   //berechne Hamming-Gewicht des Exponenten mit Basis (x) 1
-   mpz_set_ui(x, 1);
-   mpz_set_ui(y, 128);
-   mpz_set_ui(y0, 1);
-   
-  // unsigned long LITTimeModExp (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
-  unsigned long hamWeightTiming = LITTimeModExp(x, y, n);
-  
+   mpz_set_ui(x0, 1);
+
   // unsigned long LITTimeModSquare (const_longnum_ptr x, const_longnum_ptr n);
-  unsigned long potTime =   LITTimeModSquare(x, n);
+  unsigned long potTime =   EXPBITS * LITTimeModSquare(x0, n);
   
-   mpz_set_ui(y0, 1);
   // unsigned long LITTimeModMult (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
-  unsigned long hamWeight = (hamWeightTiming - potTime) / LITTimeModMult(x, x, n);
+  unsigned long multTime = LITTimeModMult(x0, x0, n);
+  unsigned long expTime = exp_daemon(z, x0);
+  unsigned long hamWeight = (expTime - potTime) / multTime; 
   
-   printf ("Hamming weight: %d %u %u \n", hamWeight, hamWeightTiming, potTime);
+   printf ("Hamming weight: %lu %lu %lu %lu \n", hamWeight, expTime, potTime, multTime);
   
   
   // unsigned long LITTimeModMult (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
