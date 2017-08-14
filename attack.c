@@ -10,6 +10,7 @@
 **/
 #include <stdio.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include <gmp.h>
 #include "texp.h"
@@ -26,7 +27,6 @@ mpz_t n; /* Modulus */
 mpz_t y_trial; /* Hier soll der geheime Exponent y berechnet werden */
 mpz_t y_ok; /* Tatsaechlicher geheimer Exponent (vom Daemon) */
 int ok; /* war der Exponent richtig? */
-int debug = 1;
 
 const unsigned long expected_timing = (1<<18);
 /* Erwartungswert fuer den Zeitaufwand einer Multiplikation */
@@ -38,55 +38,43 @@ int main (void)
                         * abholen */
 
   /* XXX Aufgabe: mit exp_daemon () Samples generieren und y_trial berechnen */
-  /* We need all exp-results and their durations */
-  mpz_t *squares;
-  mpz_t *durations;
-  mpz_t z, x, y;
-
-  for (int i = 0; i < EXPBITS; i++) {
-    mpz_set_ui(squares[i], 0);
-    mpz_set_ui(durations[i], 0);
+  mpz_t z, x, y, y0;
+  mpz_init (z);
+  mpz_init (x);
+  mpz_init (y);
+  mpz_init (y0);
+  
+  //berechne Hamming-Gewicht des Exponenten mit Basis (x) 1
+   mpz_set_ui(x, 1);
+   mpz_set_ui(y, 128);
+   mpz_set_ui(y0, 1);
+   
+  // unsigned long LITTimeModExp (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
+  unsigned long hamWeightTiming = LITTimeModExp(x, y, n);
+  
+  // unsigned long LITTimeModSquare (const_longnum_ptr x, const_longnum_ptr n);
+  unsigned long potTime =   LITTimeModSquare(x, n);
+  
+   mpz_set_ui(y0, 1);
+  // unsigned long LITTimeModMult (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
+  unsigned long hamWeight = (hamWeightTiming - potTime) / LITTimeModMult(x, x, n);
+  
+   printf ("Hamming weight: %d %u %u \n", hamWeight, hamWeightTiming, potTime);
+  
+  
+  // unsigned long LITTimeModMult (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
+   
+  // unsigned long exp_daemon (longnum_ptr z, const_longnum_ptr x)
+  
+  unsigned long timings[100];
+  mpz_t samples[100];
+  
+ /* for (unsigned int x = 0; x < 100; x++) {
+	timings[x] = exp_daemon(x, samples[x]);
+	
   }
-  mpz_set_ui(x, 1);
-  mpz_set_ui(y, 0);
-  for (int i = 0; i < EXPBITS; i++) {
-    mpz_set_ui(z, 0);
-    mpz_set_ui(durations[i], LITModExp(z, x, y, n));
-    mpz_set_ui(squares[i], mpz_get_ui(z));
-    if (mpz_get_ui(y) == 0) {
-      mpz_set_ui(y, 1);
-    } else {
-      mpz_set_ui(y, mpz_get_ui(y) * 2);
-    }
-  }
-
-  if (debug) {
-    for (int i = 0; i < EXPBITS; i++) {
-      mpz_set_ui(y, 0);
-            // z = x ^ y in some seconds.
-      printf ("%s = %s ^ %s in %s s.\n", mpz_get_str(NULL, 16, squares[i]), mpz_get_str(NULL, 16, x), mpz_get_str(NULL, 16, y), mpz_get_str(NULL, 16, durations[i]));
-    }
-    if (mpz_get_ui(y) == 0) {
-      mpz_set_ui(y, 1);
-    } else {
-      mpz_set_ui(y, mpz_get_ui(y) * 2);
-    }
-  }
-
-  /* Suche Gewicht von y */
-  //z = 0;
-  //unsigned long time_x = 0;
-  //time_x = exp_daemon(z, x);
-
-
-  // clear all
-  /*for (int i = 0; i < EXPBITS; i++) {
-    mpz_clear(squares[i]);
-    mpz_clear(durations[i]);
-  }
-  mpz_clear(z);
-  mpz_clear(x);
-  mpz_clear(y);*/
+  
+  */
 
   // printf ("Berechneter Exponent: %s\n", LLong2Hex (&y_trial, 0, 1, 1));
 	printf ("Berechneter Exponent: %s\n", mpz_get_str(NULL, 16, y_trial));
