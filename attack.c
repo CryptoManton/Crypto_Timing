@@ -41,6 +41,7 @@ int main (void)
   mpz_t z, x0;
   mpz_init (z);
   mpz_init (x0);
+  mpz_init (y_trial);
   
   //berechne Hamming-Gewicht des Exponenten mit Basis (x) 1
    mpz_set_ui(x0, 1);
@@ -55,20 +56,57 @@ int main (void)
   
    printf ("Hamming weight: %lu %lu %lu %lu \n", hamWeight, expTime, potTime, multTime);
   
+  unsigned long timings[50];
+  mpz_t samples[50];
+  mpz_t tmp;
+  mpz_init(tmp);
   
-  // unsigned long LITTimeModMult (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
-   
-  // unsigned long exp_daemon (longnum_ptr z, const_longnum_ptr x)
-  
-  unsigned long timings[100];
-  mpz_t samples[100];
-  
- /* for (unsigned int x = 0; x < 100; x++) {
-	timings[x] = exp_daemon(x, samples[x]);
+  for (unsigned int i = 0; i < 50; i++) {
+	mpz_init(samples[i]);
+	mpz_set_ui(tmp, i);
+	
+    timings[i] = exp_daemon(samples[i], tmp);
+	
+	unsigned long tmpPot = EXPBITS * LITTimeModSquare(tmp, n);
+	timings[i] -= tmpPot;
 	
   }
   
-  */
+ for (unsigned int i = 0; i < EXPBITS; i++) {
+  unsigned long t0 = 0;
+  unsigned long t1 = 0;
+  mpz_t xi, zi;
+  mpz_init(xi);
+  mpz_init(zi);
+  unsigned long tMult = 0;
+  
+	for (unsigned int j = 0; j < 50; j++) {
+	mpz_set_ui(xi, ((j >> i) & 1));
+	mpz_set_ui(zi, ((mpz_get_ui(samples[j]) >> i) & 1));
+		tMult = LITTimeModMult(xi, zi, n);
+		t0 += timings[i] - (hamWeight * expected_timing * tMult);
+		t1 += timings[i] - (tMult + (hamWeight-1) * expected_timing * tMult);
+	}
+	if (t1 < t0) {
+		mpz_set_ui(y_trial, mpz_get_ui(y_trial)| (1 << i)) ;
+		hamWeight--;
+		
+		for (unsigned int j = 0; j < 50; j++) {
+		mpz_set_ui(xi, ((j >> i) & 1));
+		mpz_set_ui(zi, ((mpz_get_ui(samples[j]) >> i) & 1));
+		tMult = LITTimeModMult(xi, zi, n);
+		timings[j] -= tMult;
+		}
+	}
+  
+  }
+
+ 
+  
+  
+  
+  
+  
 
   // printf ("Berechneter Exponent: %s\n", LLong2Hex (&y_trial, 0, 1, 1));
 	printf ("Berechneter Exponent: %s\n", mpz_get_str(NULL, 16, y_trial));
