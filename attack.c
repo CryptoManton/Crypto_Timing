@@ -31,8 +31,73 @@ int ok; /* war der Exponent richtig? */
 
 const unsigned long expected_timing = (1<<18);
 /* Erwartungswert fuer den Zeitaufwand einer Multiplikation */
+/*
+int calc(mpz_t x, mpz_t z, mpz_t y) {
+	mpz_t x0, z0;
+	mpz_init (x0);
+	mpz_init (z0);
+	
+	mpz_set(x0, x);
+	mpz_set_ui(z0, 1);
+	
+	for (unsigned int i = 0; i < 128;i++) {
+	
+			if (mpz_tstbit(y, i)) {
+				mpz_mul(z, z, x0);
+			
+			} else {
+				mpz_mul_ui(z, z, 1);
+			}
+			
+			mpz_mul(x0, x0, x0);
+	
+	
+	}
+	
+	return mpz_get_ui(z0);
 
+}
+*/
+unsigned long calcHamming(mpz_t x0, mpz_t z, mpz_t n) {
+ //berechne Hamming-Gewicht des Exponenten mit Basis (x) 1
+   mpz_set_ui(x0, 1);
 
+  // unsigned long LITTimeModSquare (const_longnum_ptr x, const_longnum_ptr n);
+  unsigned long potTime =   EXPBITS * LITTimeModSquare(x0, n);
+  
+  // unsigned long LITTimeModMult (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
+  unsigned long multTime = LITTimeModMult(x0, x0, n);
+  printf("Time for 1 mult:  %lu \n", multTime);
+  unsigned long expTime = exp_daemon(z, x0);
+  unsigned long hamWeight = (expTime - potTime) / multTime; 
+  
+   printf ("Hamming weight: %lu \n", hamWeight);
+   
+   return hamWeight;
+}
+
+/*
+unsigned long calcHammingTest(mpz_t x0, mpz_t z, mpz_t n, mpz_t y) {
+ //berechne Hamming-Gewicht des Exponenten mit Basis (x) 1
+   mpz_set_ui(x0, 1);
+
+  // unsigned long LITTimeModSquare (const_longnum_ptr x, const_longnum_ptr n);
+  unsigned long potTime =   EXPBITS * LITTimeModSquare(x0, n);
+   printf ("potTime: %lu \n", potTime);
+  
+  // unsigned long LITTimeModMult (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
+  unsigned long multTime = LITTimeModMult(x0, x0, n);
+   printf ("multTime: %lu \n", multTime);
+  unsigned long expTime = calc(z, x0, y);
+   printf ("expTime: %lu \n", expTime);
+  unsigned long hamWeight = (expTime - potTime) / multTime; 
+  
+   printf ("Hamming weight Test: %lu \n", hamWeight);
+   
+   return hamWeight;
+}
+
+*/
 int main (void)
 {
   connect_daemon (n); /* Mit dem Daemonen verbinden und den Modulus
@@ -44,23 +109,18 @@ int main (void)
   mpz_init (x0);
   mpz_init (y_trial);
   
-  //berechne Hamming-Gewicht des Exponenten mit Basis (x) 1
-   mpz_set_ui(x0, 1);
-
-  // unsigned long LITTimeModSquare (const_longnum_ptr x, const_longnum_ptr n);
-  unsigned long potTime =   EXPBITS * LITTimeModSquare(x0, n);
+  mpz_t zwei;
+	mpz_init(zwei);
+	mpz_set_ui(zwei, 2);
   
-  // unsigned long LITTimeModMult (const_longnum_ptr x, const_longnum_ptr y, const_longnum_ptr n);
-  unsigned long multTime = LITTimeModMult(x0, x0, n);
-  unsigned long expTime = exp_daemon(z, x0);
-  unsigned long hamWeight = (expTime - potTime) / multTime; 
-  
-   printf ("Hamming weight: %lu \n", hamWeight);
+	unsigned long hamWeight = calcHamming(x0, z, n);
+	
   
   unsigned long timings[NUMSAMPLES];
   mpz_t samples[NUMSAMPLES];
   mpz_t tmp;
   mpz_init(tmp);
+  unsigned long tmpTiming;
   
   //Gesamttiming der Multiplikationen
   unsigned long tM = 0;
@@ -74,99 +134,78 @@ int main (void)
     timings[i] = exp_daemon(samples[i], tmp);
 	
 	//Timing für Quadrierung
-	unsigned long tmpPot = EXPBITS * LITTimeModSquare(tmp, n);
-	//printf ("Timings: %d %lu \n", i, timings[i]);
+	mpz_t tmpTmp;
+	mpz_init(tmpTmp);
+	mpz_set(tmpTmp, tmp);
+	
+	
+	unsigned long tmpPot = 0;
+	
+	for (unsigned int j = 0; j < EXPBITS; j++) {
+		tmpPot += LITTimeModSquare(tmpTmp, n);
+		LITModExp(tmpTmp, tmpTmp, zwei, n);
+	}
+	
+	tmpTiming = timings[i] - tmpPot;
+	printf ("Timings[%d]:  %lu, %lu, %lu \n", i, timings[i], tmpPot, tmpTiming);
 	timings[i] -= tmpPot;
-
+	
+	//tM - Gesamttiming der Multiplikationen
 	tM += timings[i];
 	
-	//printf ("Timings: %d %lu \n", i, timings[i]);
   }
-  
+  printf ("Gesamttiming der Multiplikationen %lu \n", tM);
+  unsigned long timeMultHW = tM / hamWeight;
+    printf ("Gesamttiming der Multiplikationen / HW %lu \n", timeMultHW);
   
   mpz_t xi, zi;
   mpz_init(xi);
   mpz_init(zi);
-  
-  
   unsigned long tMult = 0;
-  
-  //Iteriere über alle Bit des Exponenten 
-  for (unsigned int i = 0; i < EXPBITS; i++) {
-
   unsigned long t0 = 0;
   unsigned long t1 = 0; 
- 
+  //Iteriere über alle Bit des Exponenten 
+  for (unsigned int i = 0; i < EXPBITS; i++) {
    //Berechne Korrelation für i-tes Bit bei allen Samples
 	for (unsigned int j = 0; j < NUMSAMPLES; j++) {
-		/*
-		  x0 = x
-	      z0 = 1
-		*/
-		
+		  
 	  // 0-tes Bit des Exponenten
+	  //x0 = x
+	  //z0 = 1  
 	  if (i == 0) {
-		mpz_set_ui(xi, mpz_get_ui(samples[j]));
+		mpz_set(xi, samples[j]);
 		mpz_set_ui(zi, 1);
-		
-		tMult = LITTimeModMult(xi,zi,n);
-	  } 
-	  
+	  }
+	  tMult = LITTimeModMult(xi,zi,n);
 	  //Summe über alle samples
 		t0 += tM - (hamWeight * expected_timing * tMult);
 		t1 += tM - (tMult + (hamWeight-1) * expected_timing * tMult);
-		
-	
-		//printf ("Exponent %d, Sample %d, Summe t0: %lu \n", i, j, t0);
-		//printf ("Exponent %d, Sample %d, Summe t1: %lu \n", i, j, t1);
 	}
-	
-	unsigned long fak1 = mpz_get_ui(zi);
-	mpz_t f1;
-	mpz_init(f1);
-	mpz_set_ui(f1, fak1);
-	
-	unsigned long fak2 = mpz_get_ui(xi);
-	mpz_t f2;
-	mpz_init(f2);
-	mpz_set_ui(f2, fak2);
-	
-	
+		
 	if (t1 < t0) {
 	printf("1");
 		/*
 		i-tes Bit des Exponenten ist 1
-			xi+1 = xi^2
 			zi+1 = zi * xi
-		*/
-		
-		
-		
-		mpz_mul(xi, f2, f2); 
-		mpz_mul(zi, f1, f2); 
-	
-	
-		mpz_set_ui(y_trial, mpz_get_ui(y_trial)| (1 << i)) ;
+			xi+1 = xi^2
+		*/	
+		mpz_mul(zi, xi, zi);
+		mpz_mod(zi, zi, n);
+		LITModExp(xi, xi, zwei, n);
 		
 		tM -= tMult;
-		hamWeight--;
-		
-	
+		hamWeight--;	
 	} else {
 	printf("0");
 		/* 
 		i-tes Bit des Exponenten ist 0
-			xi+1 = xi^2
 			zi+1 = zi 
+			xi+1 = xi^2
+			
 		*/
-		mpz_mul(xi, f2, f2); 
-		
+		LITModExp(xi, xi, zwei, n);	
 	}
 	
-	tMult = LITTimeModMult(xi,zi,n);
-	
-	
-  
   }
   printf("\n");
 
@@ -175,7 +214,7 @@ int main (void)
   
   
   
-  
+  //mpz_set_ui(y_trial, mpz_get_ui(y_trial)| (1 << i)) ;
 
   // printf ("Berechneter Exponent: %s\n", LLong2Hex (&y_trial, 0, 1, 1));
 	printf ("Berechneter Exponent: %s\n", mpz_get_str(NULL, 16, y_trial));
@@ -187,5 +226,16 @@ int main (void)
 		printf ("Richtig war: %s\n", mpz_get_str(NULL, 16, y_ok));
   }
   disc_daemon (); /* Verbindung zum Daemon beenden */
+  /*
+  	mpz_t xTest, yTest, zTest;
+	mpz_init(xTest);
+	mpz_init(yTest);
+	mpz_init(zTest);
+	
+	mpz_set(xTest, x0);
+	mpz_set_ui(yTest, 3);
+	
+	calcHammingTest(xTest, zTest, n, yTest);
+	*/
   exit (0);
 }
