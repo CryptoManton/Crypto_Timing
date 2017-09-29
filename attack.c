@@ -9,6 +9,25 @@
 ** attack.c: Timing-Attacke Rahmenprogramm
 **/
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+#include <gmp.h>
+#include "texp.h"
+
+#include "daemon.h"
+
+/*************************************************************
+**         Europäisches Institut für Systemsicherheit        *
+**   Proktikum "Kryptoanalyse"                               *
+**                                                           *
+** Versuch 4: Kocher-Timing-Attack                           *
+**                                                           *
+**************************************************************
+**
+** attack.c: Timing-Attacke Rahmenprogramm
+**/
+#include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
 
@@ -19,7 +38,7 @@
 
 
 #define EXPBITS 128 /* Anzahl der Bits im Exponent */
-#define NUMSAMPLES 50 /* Anzahl der genommenen Samples */
+#define NUMSAMPLES 3000 /* Anzahl der genommenen Samples */
 
 //longnum n; /* Modulus */
 //longnum y_trial; /* Hier soll der geheime Exponent y berechnet werden */
@@ -118,103 +137,106 @@ int main (void)
   
   unsigned long timings[NUMSAMPLES];
   mpz_t samples[NUMSAMPLES];
+  mpz_t values[NUMSAMPLES];
   mpz_t tmp;
   mpz_init(tmp);
   unsigned long tmpTiming;
   
-  //Gesamttiming der Multiplikationen
-  unsigned long tM = 0;
-  
+
   //entnehme Proben und ziehe Timings der Quadrierungen ab 
-  //-> erhalte Liste mit Proben und Timings der Multiplikationen
+  //-> erhalte zu den Proben gehörige Listen mit Timings der Multiplikationen
+  mpz_t tmpSample, tmpValue;
+  mpz_init(tmpSample);
+  mpz_init(tmpValue);
   for (unsigned int i = 0; i < NUMSAMPLES; i++) {
 	mpz_init(samples[i]);
-	mpz_set_ui(tmp, i);
+	mpz_init(values[i]);
 	
-    timings[i] = exp_daemon(samples[i], tmp);
+	mpz_set_ui(values[i], i);
+	mpz_set_ui(samples[i], 1);
+
+    timings[i] = exp_daemon(tmpSample, values[i]);
 	
 	//Timing für Quadrierung
-	mpz_t tmpTmp;
-	mpz_init(tmpTmp);
-	mpz_set(tmpTmp, tmp);
 	
+	mpz_set(tmpValue, values[i]);
 	
-	unsigned long tmpPot = 0;
 	
 	for (unsigned int j = 0; j < EXPBITS; j++) {
-		tmpPot += LITTimeModSquare(tmpTmp, n);
-		LITModExp(tmpTmp, tmpTmp, zwei, n);
+	//gmp_printf("tmpNum %Zd \n", tmpValue);
+		timings[i] -= LITTimeModSquare(tmpValue, n);
+		mpz_mul(tmpValue,tmpValue,tmpValue);
+		mpz_mod(tmpValue,tmpValue,n);
 	}
 	
-	tmpTiming = timings[i] - tmpPot;
-	printf ("Timings[%d]:  %lu, %lu, %lu \n", i, timings[i], tmpPot, tmpTiming);
-	timings[i] -= tmpPot;
-	
-	//tM - Gesamttiming der Multiplikationen
-	tM += timings[i];
-	
+	//	gmp_printf("AAA sample: %Zd value: %Zd \n", samples[i], values[i]);
   }
-  printf ("Gesamttiming der Multiplikationen %lu \n", tM);
-  unsigned long timeMultHW = tM / hamWeight;
-    printf ("Gesamttiming der Multiplikationen / HW %lu \n", timeMultHW);
-  
-  mpz_t xi, zi;
-  mpz_init(xi);
-  mpz_init(zi);
+
   unsigned long tMult = 0;
   unsigned long t0 = 0;
   unsigned long t1 = 0; 
   //Iteriere über alle Bit des Exponenten 
-  for (unsigned int i = 0; i < EXPBITS; i++) {
-   //Berechne Korrelation für i-tes Bit bei allen Samples
+  for (unsigned int i = 0; (i < EXPBITS) && (hamWeight > 0); i++) {
+   //Berechne Korrelation für i-tes Bit über alle Samples
+   t0 = 0;
+   t1 = 0;
 	for (unsigned int j = 0; j < NUMSAMPLES; j++) {
 		  
-	  // 0-tes Bit des Exponenten
-	  //x0 = x
-	  //z0 = 1  
-	  if (i == 0) {
-		mpz_set(xi, samples[j]);
-		mpz_set_ui(zi, 1);
-	  }
-	  tMult = LITTimeModMult(xi,zi,n);
+		//   gmp_printf("ZZZ sample: %Zd value: %Zd \n", samples[j], values[j]);
+	  tMult = LITTimeModMult(samples[j], values[j],n);
 	  //Summe über alle samples
-		t0 += tM - (hamWeight * expected_timing * tMult);
-		t1 += tM - (tMult + (hamWeight-1) * expected_timing * tMult);
+	 // printf("tMult %Zd \n", tMult);
+	  
+	 
+	 // printf("Timing: %lu tMult %lu hamWeight %d \n", timings[j], tMult, hamWeight);
+		t0 += (unsigned long) labs(((signed long) timings[j]) -  ((signed long)(hamWeight * expected_timing)));
+		t1 += (unsigned long) labs(((signed long) timings[j]) - ((signed long)(tMult + (hamWeight-1) * expected_timing)));
+		
+	//	gmp_printf("BBB sample: %Zd value: %Zd \n", samples[j], values[j]);
 	}
 		
+		//printf("t0 %lu t1 %lu \n", t0, t1);
 	if (t1 < t0) {
 	printf("1");
+	//printf("Bit %d gesetzt! \n", i);
 		/*
 		i-tes Bit des Exponenten ist 1
-			zi+1 = zi * xi
-			xi+1 = xi^2
+			zi+1 = zi * xi 
+			
+			x - values
+			z - samples
 		*/	
-		mpz_mul(zi, xi, zi);
-		mpz_mod(zi, zi, n);
-		LITModExp(xi, xi, zwei, n);
 		
-		tM -= tMult;
+		for (unsigned int j = 0; j < NUMSAMPLES; j++) {
+			mpz_mul(samples[j], samples[j], values[j]);
+		    mpz_mod(samples[j], samples[j], n);
+			
+			tMult = LITTimeModMult(samples[j], values[j], n);
+			timings[j] -= tMult;
+		}
+		
+		mpz_setbit(y_trial, i);
 		hamWeight--;	
 	} else {
 	printf("0");
 		/* 
 		i-tes Bit des Exponenten ist 0
-			zi+1 = zi 
-			xi+1 = xi^2
+			zi+1 = zi
 			
 		*/
-		LITModExp(xi, xi, zwei, n);	
+		
+	}
+	
+	//xi+1 = xi^2
+	for (unsigned int j = 0; j < NUMSAMPLES; j++) {
+			mpz_mul(values[j], values[j], values[j]);
+		    mpz_mod(values[j], values[j], n);
+			
+		//	gmp_printf("CCC sample: %Zd value: %Zd \n", samples[j], values[j]);
 	}
 	
   }
   printf("\n");
-
- 
-  
-  
-  
-  
-  //mpz_set_ui(y_trial, mpz_get_ui(y_trial)| (1 << i)) ;
 
   // printf ("Berechneter Exponent: %s\n", LLong2Hex (&y_trial, 0, 1, 1));
 	printf ("Berechneter Exponent: %s\n", mpz_get_str(NULL, 16, y_trial));
